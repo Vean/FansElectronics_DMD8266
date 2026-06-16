@@ -1,0 +1,155 @@
+# FansElectronics_DMD8266
+
+[🇬🇧 English](README.md)
+
+---
+
+## Deskripsi 📖
+**FansElectronics_DMD8266** adalah library LED Dot Matrix performa tinggi dan bebas kedipan (*flicker-free*) yang dirancang khusus untuk mikrokontroler **ESP8266**.
+
+Library ini memungkinkan pengembang IoT dan produsen tampilan digital untuk:
+- Mengendalikan panel **HUB08 dan HUB12 (P10)** dengan mudah.
+- Mengimplementasikan animasi bebas kedipan menggunakan sistem **Double Buffering**.
+- Mengatur tingkat kecerahan secara efisien melalui manajemen siklus pin Output Enable (OE).
+- Membuat grafis kompleks dengan sistem koordinat yang kokoh.
+
+Jika Anda ingin menggunakan chip ESP32, silakan gunakan library berikut: https://github.com/Vean/FansElectronics_DMD32
+
+---
+
+## Yang Baru di v1.0.0 🚀
+
+Rilis awal difokuskan pada **stabilitas multi-panel dan fleksibilitas perangkat keras** pada arsitektur ESP8266.
+
+### Mengapa memilih library ini?
+Berbeda dengan library generik lainnya, DMD8266 dioptimalkan khusus untuk kecepatan performa ESP8266:
+- **Pemetaan Pin Fleksibel:** Konfigurasi pin GPIO kustom melalui struktur data yang sederhana (DmdPins).
+- **Hardware SPI Perangkat Keras:** Memanfaatkan peripheral SPI internal bawaan ESP8266 untuk transfer data berkecepatan tinggi (10MHz) demi mencapai refresh rate yang maksimal.
+- **Interupsi Timer Tingkat Rendah:** Menggunakan hardware timer internal ESP8266 (os_timer_t) dengan interval pemindaian baris sekitar ~100µs (~500Hz) agar visual tetap kokoh dan stabil tanpa membebani fungsi utama loop().
+- **Optimasi Memori:** Alokasi heap memori secara dinamis untuk manajemen framebuffer gambar yang efisien.
+
+---
+
+## Fitur Utama ✨
+- Sistem **Double Buffer** yang unik untuk menghasilkan visual mulus tanpa kedipan dan transisi rendering yang halus.
+- Dukungan bawaan untuk panel **HUB08 (P4.25, P7.62)** dan **HUB12 (P10)**.
+- Tingkat kecerahan layar yang dapat diatur melalui manajemen pin OE khusus.
+- Engine perancangan teks dan font bawaan dengan dukungan lebar karakter dinamis maupun statis.
+- Mendukung metode penyambungan berantai (Daisy-chaining) untuk beberapa panel sekaligus, baik secara horizontal maupun vertikal.
+- Siap digunakan untuk kebutuhan produksi tampilan komersial digital 24/7.
+
+---
+
+## Mode Panel yang Didukung 🔒
+
+| Tipe Panel | Scan Rate | Model Panel | Status |
+|---|---|---|---|
+| HUB08 | 1/16 Scan | P4.25 & P7.62 Single Color | ✅ Terimplementasi |
+| HUB12 | 1/4 Scan |  P10 Single Color | ✅ Terimplementasi |
+
+Sangat cocok untuk:
+- Tampilan iklan komersial
+- Papan informasi otomasi rumah (Home Automation)
+- Sistem teks berjalan (Running Text / Moving Message)
+- Instalasi matriks LED resolusi tinggi
+- Jam Jadwal Waktu Sholat (JWS) digital
+
+---
+
+## Cara Kerja ❓
+
+1️⃣ **Inisialisasi:** Tentukan pin kendali perangkat keras dan konfigurasi panel menggunakan struct DmdPins.  
+2️⃣ **Setup:** Panggil fungsi dmd.begin() untuk mengalokasikan memori kanvas matriks dan memicu interupsi pemindaian baris tampilan otomatis.  
+3️⃣ **Menggambar:** Gunakan fungsi standar grafis primitif (drawText, drawLine, drawRect, drawCircle) langsung ke framebuffer.  
+4️⃣ **Penyegaran Layar:** Jalankan fungsi dmd.update() di dalam fungsi loop() secara berkala untuk memproses penyegaran baris latar belakang berbasis SPI.
+
+---
+
+## Konfigurasi Pin Default ⚙️
+
+Struktur data DmdPins memungkinkan Anda memetakan pin kendali matriks secara fleksibel pada ESP8266:
+
+// Contoh Pemetaan Pin untuk ESP8266 (misal: NodeMCU)
+DmdPins pinsDefault = {
+  .pin_A     = 16,   // Alamat Baris Multiplexing A (misal: D0)
+  .pin_B     = 5,    // Alamat Baris Multiplexing B (misal: D1)
+  .pin_C     = 4,    // Alamat Baris C (Isi dengan -1 untuk panel HUB12)
+  .pin_D     = 0,    // Alamat Baris D (Isi dengan -1 untuk panel HUB12)
+  .pin_latch = 2,    // Pin Latch / LAT / SCLK (misal: D4)
+  .pin_sck   = 14,   // Hardware SPI Clock (D5 pada NodeMCU)
+  .pin_oe    = 15,   // Pin Output Enable / OE (misal: D8)
+  .pin_mosi  = 13    // Hardware SPI MOSI / DATA (D7 pada NodeMCU)
+};
+
+*Catatan: Pin SCK dan MOSI secara internal terikat dengan fungsi peripheral hardware SPI bawaan ESP8266 demi menjamin kecepatan throughput aliran data.*
+
+---
+
+## Contoh Cepat 🔑
+
+Berikut adalah contoh dasar menampilkan teks menggunakan driver FansElectronics_DMD8266:
+
+#include <FansElectronics_DMD8266.h>
+// Pastikan Anda menyertakan file font yang kompatibel
+#include <fonts/SystemFont5x7.h> 
+
+FansElectronics_DMD8266 dmd;
+
+// Konfigurasi Pin disesuaikan dengan koneksi fisik panel Anda
+DmdPins myPins = {16, 5, 4, 0, 2, 14, 15, 13};
+
+void setup() {
+    // Inisialisasi: Tipe panel HUB08, 2 Panel Horizontal, 1 Panel Vertikal
+    dmd.begin(PANEL_HUB08, 2, 1, myPins); 
+    
+    // Aktifkan Double Buffer untuk animasi yang mulus tanpa kedipan
+    dmd.setDoubleBuffer(true);
+    
+    // Atur kecerahan layar (0 - 255)
+    dmd.setBrightness(200);
+    
+    // Set font aktif yang digunakan
+    // dmd.setFont(SystemFont5x7); 
+}
+
+void loop() {
+    // Bersihkan buffer kanvas latar belakang
+    dmd.clear();
+    
+    // Gambar teks pada koordinat X=2, Y=0
+    dmd.drawText(2, 0, "FansElectronics");
+    
+    // Tukar buffer gambar belakang ke layar visual utama
+    dmd.swapBuffers();
+    
+    // Tangani pembaruan data layar dan timer latar belakang
+    dmd.update();
+}
+
+---
+
+## Dibuat Oleh 💻
+- **Penulis** : Irfan Indra Kurniawan, ST
+- **Organisasi** : Fans Electronics
+- **Website** : [www.fanselectronics.com](https://www.fanselectronics.com)
+- **Email** : info@fanselectronics.com
+
+> **Catatan Penulis:** Silakan kembangkan dan gunakan library ini secara bebas untuk kebutuhan edukasi, personal, keagamaan, maupun tujuan komersial.
+
+---
+
+## Dukung Saya Lewat Kopi ☕
+- info@fanselectronics.com
+- [www.facebook.com/FansElectronicsCom](https://www.facebook.com/FansElectronicsCom)
+- [www.instagram.com/fanselectronics](https://www.instagram.com/fanselectronics)
+- [www.saweria.co/FansElectronics](https://saweria.co/FansElectronics)
+
+---
+
+## Terima Kasih Kepada 🤲
+- Allah Subhanahu Wa Ta'ala
+- Arduino.cc
+- GitHub
+- Espressif Systems
+- Para Kontributor
+- Semua pihak yang telah mendukung dan memberikan kopi ☕
