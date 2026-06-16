@@ -1,0 +1,42 @@
+########################################################################################
+# ID: Pewarnaan Sintaksis Untuk FansElectronics_DMD8266
+# EN: Syntax Highlighting For FansElectronics_DMD8266
+########################################################################################
+
+# ID: Kelas & Struktur Data (Warna Orange Tua)
+# EN: Classes & Data Structures (Dark Orange Color)
+FansElectronics_DMD8266	                                                    KEYWORD1
+FansElectronics_Bitmap	                                                    KEYWORD1
+DmdPins	                                                                    KEYWORD1
+
+# ID: Fungsi Utama Driver Layar (Warna Cokelat-Orange)
+# EN: Core Display Driver Functions (Brown-Orange Color)
+begin	                                                                    KEYWORD2
+update	                                                                    KEYWORD2
+clear	                                                                    KEYWORD2
+setBrightness	                                                            KEYWORD2
+setDoubleBuffer	                                                            KEYWORD2
+swapBuffers	                                                                KEYWORD2
+swapBuffersAndCopy	                                                        KEYWORD2
+width	                                                                    KEYWORD2
+height	                                                                    KEYWORD2
+
+# ID: Fungsi Grafis & Pemrosesan Teks dari Bitmap.h (Warna Cokelat-Orange)
+# EN: Graphics & Text Processing Functions from Bitmap.h (Brown-Orange Color)
+drawPixel	                                                                KEYWORD2
+getPixel	                                                                KEYWORD2
+drawLine	                                                                KEYWORD2
+drawRect	                                                                KEYWORD2
+fillRect	                                                                KEYWORD2
+drawCircle	                                                                KEYWORD2
+fillCircle	                                                                KEYWORD2
+drawText	                                                                KEYWORD2
+setFont	                                                                    KEYWORD2
+textWidth	                                                                KEYWORD2
+textHeight	                                                                KEYWORD2
+drawBitmap	                                                                KEYWORD2
+
+# ID: Konstanta & Literal Tipe Panel (Warna Biru)
+# EN: Constants & Panel Type Literals (Blue Color)
+PANEL_HUB08	                                                                LITERAL1
+PANEL_HUB12	                                                                LITERAL1
