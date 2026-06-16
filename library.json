@@ -1,0 +1,36 @@
+{
+    "name": "FansElectronics_DMD8266",
+    "version": "1.0.0",
+    "description": "DMD8266 Library for ESP8266 HUB12 & HUB08 Support P10, P4.75, & P7.62. This library is designed to control DMD (Dot Matrix Display) panels using ESP8266 microcontrollers.",
+    "keywords": [
+        "dmd",
+        "led",
+        "matrix",
+        "p10",
+        "hub12",
+        "hub08",
+        "esp8266",
+        "nodemcu",
+        "wemos",
+        "display",
+        "graphics"
+    ],
+    "authors": [
+        {
+            "name": "Irfan Indra Kurniawan, S.T",
+            "email": "info@fanselectronics.com",
+            "url": "https://www.fanselectronics.com",
+            "maintainer": true
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/vean/FansElectronics_DMD8266.git"
+    },
+    "homepage": "https://www.fanselectronics.com",
+    "frameworks": "arduino",
+    "platforms": [
+        "espressif8266"
+    ],
+    "license": "MIT"
+}
