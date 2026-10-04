@@ -338,7 +338,7 @@ int FansElectronics_Bitmap::drawChar(int x, int y, char ch)
     uint8_t height = fontHeight(_font);
     if (ch == ' ')
     {
-        int spaceWidth = charWidth('n');
+        int spaceWidth = 2; // Lebar Spasi default | Default Space Width
         fill(x, y, spaceWidth, height, !_textColor);
         return spaceWidth;
     }
@@ -403,7 +403,7 @@ int FansElectronics_Bitmap::charWidth(char ch) const
     uint8_t first = fontFirstChar(_font);
     uint8_t count = fontCharCount(_font);
     if (index == ' ')
-        index = 'n';
+        return 2;
     if (index < first || index >= (first + count))
         return 0;
     if (fontIsFixed(_font))
