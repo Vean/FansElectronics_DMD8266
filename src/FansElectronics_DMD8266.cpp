@@ -167,7 +167,6 @@ void FansElectronics_DMD8266::update()
     {
         tickOccured = false;
         refresh();
-        system_timer_reinit();
     }
 }
 
@@ -176,6 +175,9 @@ void FansElectronics_DMD8266::refresh()
 {
     if (_panelType == PANEL_HUB08)
     {
+        // 1. BLANKING: Matikan OE sebelum kirim data SPI
+        digitalWrite(_pins.pin_oe, HIGH);
+
         int stride16 = _stride * 16;
         volatile uint8_t *data0;
 
@@ -189,36 +191,49 @@ void FansElectronics_DMD8266::refresh()
             data0 = data0 + stride16;
         }
 
-        // Latch data
-        digitalWrite(_pins.pin_oe, HIGH);
-
+        // 2. LATCH DATA
         digitalWrite(_pins.pin_latch, HIGH);
         digitalWrite(_pins.pin_latch, LOW);
 
-        // Atur alamat baris (A,B,C,D) → 16 fase
+        // 3. ATUR ALAMAT BARIS
         digitalWrite(_pins.pin_A, bitRead(phase, 0));
         digitalWrite(_pins.pin_B, bitRead(phase, 1));
         digitalWrite(_pins.pin_C, bitRead(phase, 2));
         digitalWrite(_pins.pin_D, bitRead(phase, 3));
 
-        analogWrite(_pins.pin_oe, 255 - brightenss);
+        // 4. UNBLANKING DENGAN DURASI SKALA PRESISI
+        if (brightenss > 0)
+        {
+            digitalWrite(_pins.pin_oe, LOW); // Nyalakan layar
 
-        // Naikkan phase (0..15)
+            if (brightenss < 255)
+            {
+                // Skala 1-254 dipetakan ke 1-180 us
+                uint16_t onTime = map(brightenss, 1, 254, 1, 180);
+                delayMicroseconds(onTime);
+                digitalWrite(_pins.pin_oe, HIGH); // Padamkan setelah durasi habis
+            }
+            // Jika brightenss == 255, OE tetap LOW terus sampai refresh berikutnya (100% Max Brightness)
+        }
+
         phase = (phase + 1) & 0x0F;
     }
-    else
+    else // PANEL_HUB12
     {
+        // 1. BLANKING: Matikan OE sebelum kirim data SPI
+        digitalWrite(_pins.pin_oe, LOW);
+
         int stride4 = _stride * 4;
         volatile uint8_t *data0;
         volatile uint8_t *data1;
         volatile uint8_t *data2;
         volatile uint8_t *data3;
         bool flipRow = ((_height & 0x10) == 0);
+
         for (byte y = 0; y < _height; y += 16)
         {
             if (!flipRow)
             {
-                // The panels in this row are the right way up.
                 data0 = displayfb + _stride * (y + phase);
                 data1 = data0 + stride4;
                 data2 = data1 + stride4;
@@ -248,11 +263,30 @@ void FansElectronics_DMD8266::refresh()
                 flipRow = false;
             }
         }
+
+        // 2. LATCH DATA
         digitalWrite(_pins.pin_latch, HIGH);
         digitalWrite(_pins.pin_latch, LOW);
-        digitalWrite(_pins.pin_A, bitRead(phase, LOW));
-        digitalWrite(_pins.pin_B, bitRead(phase, HIGH));
-        analogWrite(_pins.pin_oe, brightenss);
+
+        // 3. ATUR ALAMAT BARIS
+        digitalWrite(_pins.pin_A, bitRead(phase, 0));
+        digitalWrite(_pins.pin_B, bitRead(phase, 1));
+
+        // 4. UNBLANKING DENGAN DURASI SKALA PRESISI
+        if (brightenss > 0)
+        {
+            digitalWrite(_pins.pin_oe, HIGH); // Nyalakan layar
+
+            if (brightenss < 255)
+            {
+                // Skala 1-254 dipetakan ke 1-180 us
+                uint16_t onTime = map(brightenss, 1, 254, 1, 180);
+                delayMicroseconds(onTime);
+                digitalWrite(_pins.pin_oe, LOW); // Padamkan setelah durasi habis
+            }
+            // Jika brightenss == 255, OE tetap HIGH terus sampai refresh berikutnya (100% Max Brightness)
+        }
+
         phase = (phase + 1) & 0x03;
     }
 }
