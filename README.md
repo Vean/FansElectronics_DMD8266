@@ -17,9 +17,9 @@ If you want to use the ESP32 chip, use the library https://github.com/Vean/FansE
 
 ---
 
-## What's New in v1.0.0 🚀
+## What's New in v1.1.0 🚀
 
-Initial release focused on **multi-panel stability and hardware flexibility** on the ESP8266 architecture.
+Added HUB12 parallel multi-connector support (up to 3 rows) without ribbon cable daisy-chaining, powered by ultra-fast direct register bit-banging and automatic unused row blanking. Fixing Flicker and Brightness on v1.0.1.
 
 ### Why choose this library?
 Unlike generic libraries, DMD8266 focuses on ESP8266 performance optimization:
