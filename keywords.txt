@@ -3,40 +3,59 @@
 # EN: Syntax Highlighting For FansElectronics_DMD8266
 ########################################################################################
 
-# ID: Kelas & Struktur Data (Warna Orange Tua)
-# EN: Classes & Data Structures (Dark Orange Color)
-FansElectronics_DMD8266	                                                    KEYWORD1
-FansElectronics_Bitmap	                                                    KEYWORD1
-DmdPins	                                                                    KEYWORD1
+# ID: Kelas, Struktur Data, & Tipe Enum (Warna Orange Tua)
+# EN: Classes, Data Structures, & Enum Types (Dark Orange Color)
+FansElectronics_DMD8266                                                     	KEYWORD1
+FansElectronics_Bitmap	                                                    	KEYWORD1
+DmdPins	                                                    	                KEYWORD1
+PanelType	                                                    	            KEYWORD1
+ScanMode	                                                    	            KEYWORD1
 
 # ID: Fungsi Utama Driver Layar (Warna Cokelat-Orange)
 # EN: Core Display Driver Functions (Brown-Orange Color)
-begin	                                                                    KEYWORD2
-update	                                                                    KEYWORD2
-clear	                                                                    KEYWORD2
-setBrightness	                                                            KEYWORD2
-setDoubleBuffer	                                                            KEYWORD2
-swapBuffers	                                                                KEYWORD2
-swapBuffersAndCopy	                                                        KEYWORD2
-width	                                                                    KEYWORD2
-height	                                                                    KEYWORD2
+begin	                                                                        KEYWORD2
+update	                                                    	                KEYWORD2
+refresh	                                                    	                KEYWORD2
+clear	                                                    	                KEYWORD2
+setBrightness	                                                                KEYWORD2
+setDoubleBuffer                                                    	        	KEYWORD2
+doubleBuffer	                                                                KEYWORD2
+swapBuffers	                                                    	            KEYWORD2
+swapBuffersAndCopy	                                                    	    KEYWORD2
+width	                                                                	    KEYWORD2
+height	                                                    	                KEYWORD2
+stride	                                                    	                KEYWORD2
+fromRGB	                                                    	                KEYWORD2
 
-# ID: Fungsi Grafis & Pemrosesan Teks dari Bitmap.h (Warna Cokelat-Orange)
-# EN: Graphics & Text Processing Functions from Bitmap.h (Brown-Orange Color)
-drawPixel	                                                                KEYWORD2
-getPixel	                                                                KEYWORD2
-drawLine	                                                                KEYWORD2
-drawRect	                                                                KEYWORD2
-fillRect	                                                                KEYWORD2
-drawCircle	                                                                KEYWORD2
-fillCircle	                                                                KEYWORD2
-drawText	                                                                KEYWORD2
-setFont	                                                                    KEYWORD2
-textWidth	                                                                KEYWORD2
-textHeight	                                                                KEYWORD2
-drawBitmap	                                                                KEYWORD2
+# ID: Fungsi Grafis & Pemrosesan Teks dari FansElectronics_Bitmap (Warna Cokelat-Orange)
+# EN: Graphics & Text Processing Functions from FansElectronics_Bitmap (Brown-Orange Color)
+pixel	                                                    	                KEYWORD2
+setPixel	                                                    	            KEYWORD2
+drawLine	                                                    	            KEYWORD2
+drawRect	                                                    	            KEYWORD2
+drawFilledRect	                                                    	        KEYWORD2
+drawCircle                                                    	            	KEYWORD2
+drawFilledCircle	                                                    	    KEYWORD2
+drawBitmap                                                    	            	KEYWORD2
+drawInvertedBitmap	                                                    	    KEYWORD2
+drawText	                                                    	            KEYWORD2
+drawTextCenter	                                                    	        KEYWORD2
+drawChar	                                                    	            KEYWORD2
+charWidth	                                                    	            KEYWORD2
+textWidth	                                                    	            KEYWORD2
+textHeight	                                                    	            KEYWORD2
+setFont	                                                    	                KEYWORD2
+font	                                                    	                KEYWORD2
+setTextColor	                                                    	        KEYWORD2
+textColor	                                                    	            KEYWORD2
+copy	                                                    	                KEYWORD2
+fill                                                    	                	KEYWORD2
+scroll	                                                    	                KEYWORD2
+invert                                                    	                	KEYWORD2
 
-# ID: Konstanta & Literal Tipe Panel (Warna Biru)
-# EN: Constants & Panel Type Literals (Blue Color)
-PANEL_HUB08	                                                                LITERAL1
-PANEL_HUB12	                                                                LITERAL1
+# ID: Konstanta & Literal Tipe Panel serta Mode Scan (Warna Biru)
+# EN: Constants & Panel Type / Scan Mode Literals (Blue Color)
+PANEL_HUB08	                                                    	            LITERAL1
+PANEL_HUB12	                                                    	            LITERAL1
+SCAN_ZIGZAG                                                    	            	LITERAL1
+SCAN_PARALLEL                                                    	        	LITERAL1
