@@ -3,7 +3,7 @@
  * Creator             : Irfan Indra Kurniawan, ST
  * Website             : https://www.fanselectronics.com
  * Buy Me a Coffee     : https://saweria.co/FansElectronics
- * Ported for Multi-Panel Type (HUB08 & HUB12) on ESP32
+ * Ported for Multi-Panel Type (HUB08 & HUB12) on ESP8266
  * Support P10, P4.25, P7.62, dan panel custom dengan konfigurasi pin fleksibel
  */
 
@@ -52,7 +52,8 @@ static const uint8_t flipBits[256] PROGMEM = {
 
 //----------------------------------------------------------------------------------------------
 FansElectronics_DMD8266::FansElectronics_DMD8266()
-    : FansElectronics_Bitmap(0, 0), _doubleBuffer(false), phase(0), fb0(0), fb1(0), displayfb(0), lastRefresh(millis())
+    : FansElectronics_Bitmap(0, 0), _doubleBuffer(false), phase(0), fb0(0), fb1(0), displayfb(0),
+      lastRefresh(millis()), _scanMode(SCAN_ZIGZAG), _maskD0(0), _maskD1(0), _maskD2(0), _maskCLK(0), _maskUnusedData(0)
 {
     brightenss = 255;
     fb0 = displayfb = fb;
@@ -82,12 +83,28 @@ void dispinit(void)
     os_timer_arm_us(&dispTimer, DMD_REFRESH_US, true);
 }
 //----------------------------------------------------------------------------------------------
-void FansElectronics_DMD8266::begin(PanelType type, int panelsWide, int panelsHigh, DmdPins pins, int panelWidthPx, int panelHeightPx)
+void FansElectronics_DMD8266::begin(PanelType type, int panelsWide, int panelsHigh, DmdPins pins, int panelWidthPx, int panelHeightPx, ScanMode scanMode)
 {
     _panelType = type;
-    _panelsWide = panelsWide;
-    _panelsHigh = panelsHigh;
+    _panelsWide = (panelsWide < 1) ? 1 : panelsWide;
+    _panelsHigh = (panelsHigh < 1) ? 1 : panelsHigh;
     _pins = pins;
+    _scanMode = scanMode;
+
+    // ID: Pembatasan jumlah baris maksimal 3 untuk mode SCAN_PARALLEL pada HUB12 di ESP8266
+    // EN: Limit maximum panel rows to 3 when using SCAN_PARALLEL on HUB12 for ESP8266
+    if (_panelType == PANEL_HUB12 && _scanMode == SCAN_PARALLEL)
+    {
+        if (_panelsHigh > 3)
+        {
+            _panelsHigh = 3;
+        }
+    }
+    else
+    {
+        // HUB08 selalu menggunakan mode standar
+        _scanMode = SCAN_ZIGZAG;
+    }
 
     // ID: Pengaman deteksi resolusi otomatis jika masukan pengguna bernilai nol
     // EN: Auto-resolution fallback mechanism if user parameters are zero
@@ -118,6 +135,8 @@ void FansElectronics_DMD8266::begin(PanelType type, int panelsWide, int panelsHi
 
     // ID: Alokasi heap memori untuk buffer frame visual primer
     // EN: Dynamic heap allocation for the primary video framebuffer
+    if (fb0)
+        free(fb0);
     unsigned int size = _stride * _height;
     fb0 = (uint8_t *)malloc(size);
     if (fb0)
@@ -128,8 +147,6 @@ void FansElectronics_DMD8266::begin(PanelType type, int panelsWide, int panelsHi
 
     // ID: Konfigurasi arah kendali GPIO register matriks
     // EN: Configuration of matrix shift-register GPIO control flow
-    pinMode(SCK, SPECIAL);
-    pinMode(MOSI, SPECIAL);
     pinMode(_pins.pin_A, OUTPUT);
     pinMode(_pins.pin_B, OUTPUT);
     if (_pins.pin_C != -1)
@@ -146,18 +163,131 @@ void FansElectronics_DMD8266::begin(PanelType type, int panelsWide, int panelsHi
     if (_pins.pin_D != -1)
         digitalWrite(_pins.pin_D, LOW);
     digitalWrite(_pins.pin_latch, LOW);
-    digitalWrite(_pins.pin_oe, LOW);
+    digitalWrite(_pins.pin_oe, (_panelType == PANEL_HUB08) ? HIGH : LOW);
 
-    SPI1C = 0;
-    SPI1U = SPIUMOSI | SPIUDUPLEX | SPIUSSE;
-    SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
-    SPI1C1 = 0;
-    SPI1C &= ~(SPICWBO | SPICRBO);
-    SPI1U &= ~(SPIUSME);
-    SPI1P &= ~(1 << 29);
-    SPI.setFrequency(10000000);
+    // ID: Hitung bitmask GPIO untuk jalur data dan clock
+    // EN: Precompute GPIO bitmasks for data and clock lines
+    _maskD0 = (_pins.pin_data1 >= 0 && _pins.pin_data1 < 16) ? (1UL << _pins.pin_data1) : 0;
+    _maskD1 = (_pins.pin_data2 >= 0 && _pins.pin_data2 < 16) ? (1UL << _pins.pin_data2) : 0;
+    _maskD2 = (_pins.pin_data3 >= 0 && _pins.pin_data3 < 16) ? (1UL << _pins.pin_data3) : 0;
+    _maskCLK = (_pins.pin_sck >= 0 && _pins.pin_sck < 16) ? (1UL << _pins.pin_sck) : 0;
+    _maskUnusedData = 0;
+
+    if (_panelType == PANEL_HUB12)
+    {
+        // ID: Pengaman Anti-Silau: Set semua pin data tambahan yang terhubung ke HIGH (Padam)
+        // EN: Anti-Glare Safety: Pull any connected auxiliary data pins HIGH (Blanked)
+        if (_pins.pin_data2 != -1)
+        {
+            pinMode(_pins.pin_data2, OUTPUT);
+            digitalWrite(_pins.pin_data2, HIGH); // HIGH = Mati pada HUB12
+        }
+        if (_pins.pin_data3 != -1)
+        {
+            pinMode(_pins.pin_data3, OUTPUT);
+            digitalWrite(_pins.pin_data3, HIGH); // HIGH = Mati pada HUB12
+        }
+
+        // Tentukan konektor mana yang tidak terpakai berdasarkan jumlah baris (_panelsHigh)
+        if (_scanMode == SCAN_ZIGZAG || _panelsHigh == 1)
+        {
+            _maskUnusedData = _maskD1 | _maskD2; // Baris 2 & 3 dipaksa mati
+        }
+        else if (_panelsHigh == 2)
+        {
+            _maskUnusedData = _maskD2; // Baris 3 dipaksa mati
+        }
+    }
+
+    if (_panelType == PANEL_HUB12 && _scanMode == SCAN_PARALLEL)
+    {
+        // ID: Mode Multi-Konektor (Parallel) menggunakan GPIO Output murni (Fast Bit-Banging)
+        // EN: Multi-Connector (Parallel) mode uses direct GPIO Output (Fast Bit-Banging)
+        pinMode(_pins.pin_sck, OUTPUT);
+        pinMode(_pins.pin_data1, OUTPUT);
+        digitalWrite(_pins.pin_sck, LOW);
+        digitalWrite(_pins.pin_data1, HIGH);
+    }
+    else
+    {
+        // ID: Mode Zigzag / Standar menggunakan Hardware SPI
+        // EN: Zigzag / Standard mode uses Hardware SPI
+        pinMode(SCK, SPECIAL);
+        pinMode(MOSI, SPECIAL);
+        SPI1C = 0;
+        SPI1U = SPIUMOSI | SPIUDUPLEX | SPIUSSE;
+        SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
+        SPI1C1 = 0;
+        SPI1C &= ~(SPICWBO | SPICRBO);
+        SPI1U &= ~(SPIUSME);
+        SPI1P &= ~(1 << 29);
+        SPI.setFrequency(10000000);
+    }
+
     tickOccured = false;
     dispinit();
+}
+
+//----------------------------------------------------------------------------------------------
+// ID: Bit-Banging 1 Baris (Sekaligus memastikan konektor Baris 2 & 3 tetap HIGH / Padam)
+// EN: 1-Row Bit-Banging (Simultaneously keeps Row 2 & 3 connectors HIGH / Blanked)
+inline void FansElectronics_DMD8266::shiftOutParallel1(uint8_t b0, uint32_t maskD0, uint32_t maskCLK, uint32_t maskUnused)
+{
+    for (uint8_t bit = 0x80; bit != 0; bit >>= 1)
+    {
+        if (b0 & bit)
+            GPOS = maskD0 | maskUnused;
+        else
+        {
+            if (maskUnused)
+                GPOS = maskUnused;
+            GPOC = maskD0;
+        }
+        GPOS = maskCLK;
+        GPOC = maskCLK;
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// ID: Bit-Banging Cepat untuk 2 Baris Panel HUB12 (Konektor 1: pin_data1, Konektor 2: pin_data2)
+// EN: Fast Bit-Banging Routine for 2 Rows of HUB12 Panels (Conn 1: pin_data1, Conn 2: pin_data2)
+inline void FansElectronics_DMD8266::shiftOutParallel2(uint8_t b0, uint8_t b1, uint32_t maskD0, uint32_t maskD1, uint32_t maskCLK, uint32_t maskAllActive, uint32_t maskUnused)
+{
+    for (uint8_t bit = 0x80; bit != 0; bit >>= 1)
+    {
+        uint32_t setBits = maskUnused; // Pastikan konektor ke-3 (jika ada) tetap HIGH (Mati)
+        if (b0 & bit)
+            setBits |= maskD0;
+        if (b1 & bit)
+            setBits |= maskD1;
+
+        GPOS = setBits;                                     // Set pin yang bernilai HIGH
+        GPOC = (maskAllActive ^ (setBits & maskAllActive)); // Clear pin yang bernilai LOW
+        GPOS = maskCLK;                                     // Clock HIGH
+        GPOC = maskCLK;                                     // Clock LOW
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// ID: Bit-Banging Cepat untuk 3 Baris Panel HUB12 (Konektor 1: pin_data1, Konektor 2: pin_data2, Konektor 3: pin_data3)
+// EN: Fast Bit-Banging Routine for 3 Rows of HUB12 Panels (Conn 1: pin_data1, Conn 2: pin_data2, Conn 3: pin_data3)
+inline void FansElectronics_DMD8266::shiftOutParallel3(uint8_t b0, uint8_t b1, uint8_t b2, uint32_t maskD0, uint32_t maskD1, uint32_t maskD2, uint32_t maskCLK, uint32_t maskAllActive)
+{
+    for (uint8_t bit = 0x80; bit != 0; bit >>= 1)
+    {
+        uint32_t setBits = 0;
+        if (b0 & bit)
+            setBits |= maskD0;
+        if (b1 & bit)
+            setBits |= maskD1;
+        if (b2 & bit)
+            setBits |= maskD2;
+
+        GPOS = setBits;                   // Set pin yang bernilai HIGH
+        GPOC = (maskAllActive ^ setBits); // Clear pin yang bernilai LOW
+        GPOS = maskCLK;                   // Clock HIGH
+        GPOC = maskCLK;                   // Clock LOW
+    }
 }
 
 //----------------------------------------------------------------------------------------------
@@ -220,47 +350,128 @@ void FansElectronics_DMD8266::refresh()
     }
     else // PANEL_HUB12
     {
-        // 1. BLANKING: Matikan OE sebelum kirim data SPI
+        // 1. BLANKING: Matikan OE sebelum kirim data
         digitalWrite(_pins.pin_oe, LOW);
 
-        int stride4 = _stride * 4;
-        volatile uint8_t *data0;
-        volatile uint8_t *data1;
-        volatile uint8_t *data2;
-        volatile uint8_t *data3;
-        bool flipRow = ((_height & 0x10) == 0);
-
-        for (byte y = 0; y < _height; y += 16)
+        // Pastikan pin data konektor yang tidak dipakai selalu ditahan HIGH (Padam)
+        if (_maskUnusedData)
         {
-            if (!flipRow)
+            GPOS = _maskUnusedData;
+        }
+
+        int stride4 = _stride * 4;
+
+        if (_scanMode == SCAN_ZIGZAG)
+        {
+            // =========================================================================
+            // MODE 1: SCAN_ZIGZAG (DEFAULT - 1 KONEKTOR VIA HARDWARE SPI)
+            // =========================================================================
+            volatile uint8_t *data0;
+            volatile uint8_t *data1;
+            volatile uint8_t *data2;
+            volatile uint8_t *data3;
+            bool flipRow = ((_height & 0x10) == 0);
+
+            for (byte y = 0; y < _height; y += 16)
             {
-                data0 = displayfb + _stride * (y + phase);
-                data1 = data0 + stride4;
-                data2 = data1 + stride4;
-                data3 = data2 + stride4;
-                for (int x = _stride; x > 0; --x)
+                if (!flipRow)
                 {
-                    SPI.write(*data3++);
-                    SPI.write(*data2++);
-                    SPI.write(*data1++);
-                    SPI.write(*data0++);
+                    data0 = displayfb + _stride * (y + phase);
+                    data1 = data0 + stride4;
+                    data2 = data1 + stride4;
+                    data3 = data2 + stride4;
+                    for (int x = _stride; x > 0; --x)
+                    {
+                        SPI.write(*data3++);
+                        SPI.write(*data2++);
+                        SPI.write(*data1++);
+                        SPI.write(*data0++);
+                    }
+                    flipRow = true;
                 }
-                flipRow = true;
+                else
+                {
+                    data0 = displayfb + _stride * (y + 16 - phase) - 1;
+                    data1 = data0 - stride4;
+                    data2 = data1 - stride4;
+                    data3 = data2 - stride4;
+                    for (int x = _stride; x > 0; --x)
+                    {
+                        SPI.transfer(pgm_read_byte(&(flipBits[*data3--])));
+                        SPI.transfer(pgm_read_byte(&(flipBits[*data2--])));
+                        SPI.transfer(pgm_read_byte(&(flipBits[*data1--])));
+                        SPI.transfer(pgm_read_byte(&(flipBits[*data0--])));
+                    }
+                    flipRow = false;
+                }
             }
-            else
+        }
+        else
+        {
+            // =========================================================================
+            // MODE 2: SCAN_PARALLEL (MULTI-KONEKTOR 1, 2, ATAU 3 BARIS TANPA ZIGZAG)
+            // Baris 1 (Atas)   -> pin_data1
+            // Baris 2 (Tengah) -> pin_data2
+            // Baris 3 (Bawah)  -> pin_data3
+            // =========================================================================
+            int row16Offset = _stride * 16;
+
+            // Pointer Baris Panel 1 (Y: 0..15)
+            volatile uint8_t *r0_d0 = displayfb + _stride * phase;
+            volatile uint8_t *r0_d1 = r0_d0 + stride4;
+            volatile uint8_t *r0_d2 = r0_d1 + stride4;
+            volatile uint8_t *r0_d3 = r0_d2 + stride4;
+
+            if (_panelsHigh == 1)
             {
-                data0 = displayfb + _stride * (y + 16 - phase) - 1;
-                data1 = data0 - stride4;
-                data2 = data1 - stride4;
-                data3 = data2 - stride4;
+                // Jika diset 1 baris pada mode SCAN_PARALLEL, baris 2 & 3 otomatis diisi HIGH (Mati)
                 for (int x = _stride; x > 0; --x)
                 {
-                    SPI.transfer(pgm_read_byte(&(flipBits[*data3--])));
-                    SPI.transfer(pgm_read_byte(&(flipBits[*data2--])));
-                    SPI.transfer(pgm_read_byte(&(flipBits[*data1--])));
-                    SPI.transfer(pgm_read_byte(&(flipBits[*data0--])));
+                    shiftOutParallel1(*r0_d3++, _maskD0, _maskCLK, _maskUnusedData);
+                    shiftOutParallel1(*r0_d2++, _maskD0, _maskCLK, _maskUnusedData);
+                    shiftOutParallel1(*r0_d1++, _maskD0, _maskCLK, _maskUnusedData);
+                    shiftOutParallel1(*r0_d0++, _maskD0, _maskCLK, _maskUnusedData);
                 }
-                flipRow = false;
+            }
+            else if (_panelsHigh == 2)
+            {
+                // Pointer Baris Panel 2 (Y: 16..31)
+                volatile uint8_t *r1_d0 = r0_d0 + row16Offset;
+                volatile uint8_t *r1_d1 = r1_d0 + stride4;
+                volatile uint8_t *r1_d2 = r1_d1 + stride4;
+                volatile uint8_t *r1_d3 = r1_d2 + stride4;
+
+                uint32_t maskAllActive = _maskD0 | _maskD1;
+                for (int x = _stride; x > 0; --x)
+                {
+                    shiftOutParallel2(*r0_d3++, *r1_d3++, _maskD0, _maskD1, _maskCLK, maskAllActive, _maskUnusedData);
+                    shiftOutParallel2(*r0_d2++, *r1_d2++, _maskD0, _maskD1, _maskCLK, maskAllActive, _maskUnusedData);
+                    shiftOutParallel2(*r0_d1++, *r1_d1++, _maskD0, _maskD1, _maskCLK, maskAllActive, _maskUnusedData);
+                    shiftOutParallel2(*r0_d0++, *r1_d0++, _maskD0, _maskD1, _maskCLK, maskAllActive, _maskUnusedData);
+                }
+            }
+            else if (_panelsHigh >= 3)
+            {
+                // Pointer Baris Panel 2 (Y: 16..31)
+                volatile uint8_t *r1_d0 = r0_d0 + row16Offset;
+                volatile uint8_t *r1_d1 = r1_d0 + stride4;
+                volatile uint8_t *r1_d2 = r1_d1 + stride4;
+                volatile uint8_t *r1_d3 = r1_d2 + stride4;
+
+                // Pointer Baris Panel 3 (Y: 32..47)
+                volatile uint8_t *r2_d0 = r1_d0 + row16Offset;
+                volatile uint8_t *r2_d1 = r2_d0 + stride4;
+                volatile uint8_t *r2_d2 = r2_d1 + stride4;
+                volatile uint8_t *r2_d3 = r2_d2 + stride4;
+
+                uint32_t maskAllActive = _maskD0 | _maskD1 | _maskD2;
+                for (int x = _stride; x > 0; --x)
+                {
+                    shiftOutParallel3(*r0_d3++, *r1_d3++, *r2_d3++, _maskD0, _maskD1, _maskD2, _maskCLK, maskAllActive);
+                    shiftOutParallel3(*r0_d2++, *r1_d2++, *r2_d2++, _maskD0, _maskD1, _maskD2, _maskCLK, maskAllActive);
+                    shiftOutParallel3(*r0_d1++, *r1_d1++, *r2_d1++, _maskD0, _maskD1, _maskD2, _maskCLK, maskAllActive);
+                    shiftOutParallel3(*r0_d0++, *r1_d0++, *r2_d0++, _maskD0, _maskD1, _maskD2, _maskCLK, maskAllActive);
+                }
             }
         }
 
